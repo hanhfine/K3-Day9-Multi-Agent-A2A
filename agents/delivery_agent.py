@@ -12,17 +12,25 @@ from typing import Any
 
 
 def _parse_timestamp(ts: str | None) -> datetime | None:
-    """Parse timestamp từ CSV. Trả về None nếu thiếu hoặc rỗng.
-    
-    Format trong CSV: '2017-10-02 10:56:33'
+    """Parse timestamp từ CSV hoặc từ handoff của Order/Seller Agent. Trả về None
+    nếu thiếu hoặc rỗng.
+
+    Chấp nhận 2 định dạng:
+      - Format gốc trong CSV: '2017-10-02 10:56:33'
+      - Format ISO do OrderSellerAgent (Người 1) xuất ra khi JSON-hoá pd.Timestamp:
+        '2017-10-02T10:56:33'
     """
-    if not ts or not ts.strip() or ts.strip().strip('"') == "":
+    if isinstance(ts, datetime):
+        return ts
+    if not ts or not str(ts).strip() or str(ts).strip().strip('"') == "":
         return None
-    ts_clean = ts.strip().strip('"')
-    try:
-        return datetime.strptime(ts_clean, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return None
+    ts_clean = str(ts).strip().strip('"')
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(ts_clean, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def run(order: dict, items: list[dict]) -> dict[str, Any]:
