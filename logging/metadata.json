@@ -1,0 +1,74 @@
+{
+  "system_name": "Multi-Agent E-commerce Dispute Resolution",
+  "policy_version": "EC_POLICY_V1",
+  "run": {
+    "entrypoint": "python -m src.main",
+    "batch_size": 50,
+    "date_generated": "PENDING_REAL_RUN"
+  },
+  "framework": {
+    "language": "Python 3.11+",
+    "libraries": ["pandas", "requests", "python-dotenv"],
+    "orchestration": "Custom sequential pipeline (Coordinator class, src/coordinator.py) — không dùng framework agent bên ngoài (LangChain/CrewAI...), tự viết handoff JSON giữa các agent theo plan.md"
+  },
+  "agents": [
+    {
+      "name": "order_seller_agent",
+      "owner": "Nguoi 1",
+      "module": "src/agents/order_seller_agent.py",
+      "uses_llm": false,
+      "note": "Join order/item/seller/customer thuần deterministic từ CSV, không gọi model."
+    },
+    {
+      "name": "payment_agent",
+      "owner": "Nguoi 2",
+      "module": "agents/payment_agent.py",
+      "uses_llm": false,
+      "note": "Đối soát payment thuần deterministic."
+    },
+    {
+      "name": "delivery_agent",
+      "owner": "Nguoi 2",
+      "module": "agents/delivery_agent.py",
+      "uses_llm": false,
+      "note": "So sánh timestamp giao hàng thuần deterministic."
+    },
+    {
+      "name": "policy_agent",
+      "owner": "Nguoi 3",
+      "module": "agents/policy_agent.py",
+      "uses_llm": false,
+      "note": "Áp EC_POLICY_V1 theo thứ tự ưu tiên, thuần deterministic để đảm bảo chính xác tuyệt đối cho phần chấm điểm."
+    },
+    {
+      "name": "verifier_agent",
+      "owner": "Nguoi 3",
+      "module": "agents/verifier_agent.py",
+      "uses_llm": false,
+      "note": "Kiểm tra schema/evidence/consistency thuần deterministic, không tự sửa dữ liệu."
+    },
+    {
+      "name": "coordinator_llm_reasoning",
+      "owner": "Nguoi 4",
+      "module": "src/coordinator.py (Coordinator._coordinator_reasoning)",
+      "uses_llm": true,
+      "model": {
+        "name": "llama-3.1-8b-instant",
+        "provider": "Groq API",
+        "parameter_size": "8B",
+        "parameter_size_constraint_ok": "<=10B theo yêu cầu đề bài",
+        "temperature": 0.0,
+        "response_format": "json_object"
+      },
+      "note": "Chạy SAU Policy Agent + Verifier Agent. Chỉ sinh tóm tắt tiếng Việt cho khách hàng và sanity-check tính nhất quán; KHÔNG được phép ghi đè bất kỳ số liệu/boolean nào đã được engine deterministic xác định. Nếu Groq API lỗi hoặc --no-llm, pipeline vẫn chạy đầy đủ 50 case (output không đổi, chỉ thiếu phần summary_vi trong trace)."
+    }
+  ],
+  "runtime": {
+    "python_version": "3.11",
+    "os": "Linux (sandboxed execution environment)",
+    "network": "Gọi Groq API (api.groq.com) qua HTTPS cho coordinator_llm_reasoning; toàn bộ agent còn lại chạy hoàn toàn offline trên CSV local trong data/"
+  },
+  "secrets": {
+    "GROQ_API_KEY": "đặt trong .env (không commit), khai báo mẫu trong .env.example"
+  }
+}
