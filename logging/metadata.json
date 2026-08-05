@@ -4,7 +4,7 @@
   "run": {
     "entrypoint": "python -m src.main",
     "batch_size": 50,
-    "date_generated": "PENDING_REAL_RUN"
+    "date_generated": "2026-08-05"
   },
   "framework": {
     "language": "Python 3.11+",
@@ -22,28 +22,28 @@
     {
       "name": "payment_agent",
       "owner": "Nguoi 2",
-      "module": "agents/payment_agent.py",
+      "module": "src/agents/payment_agent.py",
       "uses_llm": false,
       "note": "Đối soát payment thuần deterministic."
     },
     {
       "name": "delivery_agent",
       "owner": "Nguoi 2",
-      "module": "agents/delivery_agent.py",
+      "module": "src/agents/delivery_agent.py",
       "uses_llm": false,
       "note": "So sánh timestamp giao hàng thuần deterministic."
     },
     {
       "name": "policy_agent",
       "owner": "Nguoi 3",
-      "module": "agents/policy_agent.py",
+      "module": "src/agents/policy_agent.py",
       "uses_llm": false,
       "note": "Áp EC_POLICY_V1 theo thứ tự ưu tiên, thuần deterministic để đảm bảo chính xác tuyệt đối cho phần chấm điểm."
     },
     {
       "name": "verifier_agent",
       "owner": "Nguoi 3",
-      "module": "agents/verifier_agent.py",
+      "module": "src/agents/verifier_agent.py",
       "uses_llm": false,
       "note": "Kiểm tra schema/evidence/consistency thuần deterministic, không tự sửa dữ liệu."
     },
@@ -65,7 +65,7 @@
   ],
   "runtime": {
     "python_version": "3.11",
-    "os": "Linux (sandboxed execution environment)",
+    "os": "Windows",
     "network": "Gọi Groq API (api.groq.com) qua HTTPS cho coordinator_llm_reasoning; toàn bộ agent còn lại chạy hoàn toàn offline trên CSV local trong data/"
   },
   "secrets": {

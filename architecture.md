@@ -120,14 +120,13 @@ src/
   agents/
     data_loader.py        # Người 1 — nạp CSV 1 lần cho toàn batch
     order_seller_agent.py # Người 1 — Order & Seller Agent
+    payment_agent.py      # Người 2
+    delivery_agent.py     # Người 2
+    policy_agent.py       # Người 3
+    verifier_agent.py     # Người 3
   coordinator.py           # Người 4 — điều phối pipeline + LLM reasoning
-  llm_client.py             # Người 4 — Groq API client dùng chung
-  main.py                   # Người 4 — batch runner 50 case
-agents/
-  payment_agent.py          # Người 2
-  delivery_agent.py         # Người 2
-  policy_agent.py           # Người 3
-  verifier_agent.py         # Người 3
+  llm_client.py            # Người 4 — Groq API client dùng chung
+  main.py                  # Người 4 — batch runner 50 case
 data/                       # 5/9 CSV Olist thực sự dùng trong pipeline
 input/EC_001.json .. EC_050.json
 output/EC_001.json .. EC_050.json   (sinh ra khi chạy batch)

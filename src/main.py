@@ -18,6 +18,11 @@ import argparse
 import json
 import os
 import sys
+import io
+
+# Fix Windows console encoding for Vietnamese
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT_DIR not in sys.path:
@@ -25,7 +30,7 @@ if _ROOT_DIR not in sys.path:
 
 from dotenv import load_dotenv
 
-from agents import policy_agent
+from src.agents import policy_agent
 from src.coordinator import Coordinator
 
 DATA_DIR = os.path.join(_ROOT_DIR, "data")

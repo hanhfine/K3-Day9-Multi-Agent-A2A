@@ -17,7 +17,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 # Thêm project root vào path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agents import payment_agent, delivery_agent
+from src.agents import payment_agent, delivery_agent
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "input")

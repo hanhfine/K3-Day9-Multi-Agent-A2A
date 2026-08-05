@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from src.agents.data_loader import DataLoader
 from src.agents.order_seller_agent import OrderSellerAgent
-from agents import payment_agent, delivery_agent, policy_agent, verifier_agent
+from src.agents import payment_agent, delivery_agent, policy_agent, verifier_agent
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "input")

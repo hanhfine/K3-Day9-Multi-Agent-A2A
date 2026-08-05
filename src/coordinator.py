@@ -34,7 +34,7 @@ _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT_DIR not in sys.path:
     sys.path.insert(0, _ROOT_DIR)
 
-from agents import delivery_agent, payment_agent, policy_agent, verifier_agent  # Người 2, 3
+from src.agents import delivery_agent, payment_agent, policy_agent, verifier_agent  # Người 2, 3
 from src.agents.data_loader import DataLoader  # Người 1
 from src.agents.order_seller_agent import OrderSellerAgent  # Người 1
 from src.llm_client import LLMError, call_agent_llm

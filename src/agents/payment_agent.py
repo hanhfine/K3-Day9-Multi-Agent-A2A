@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
 PAYMENTS_CSV = os.path.join(DATA_DIR, "olist_order_payments_dataset.csv")
 
 # Cache toàn bộ payments, group theo order_id (load 1 lần duy nhất)
