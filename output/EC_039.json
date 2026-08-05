@@ -3,7 +3,7 @@
   "assessment": {
     "primary_issue": "unsupported_late_claim",
     "case_status": "no_action",
-    "confidence": 0.8
+    "confidence": 0.92
   },
   "affected_entities": {
     "order_ids": [
@@ -30,6 +30,7 @@
   },
   "evidence_ids": [
     "order:44a03ff139461361ec4cce7949663c2f",
+    "item:44a03ff139461361ec4cce7949663c2f:1",
     "payment:44a03ff139461361ec4cce7949663c2f:1",
     "policy:DELIVERY_WITHIN_ESTIMATE"
   ],

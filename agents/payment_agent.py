@@ -12,6 +12,17 @@ import csv
 import os
 from typing import Any
 
+# Model <= 10B declared in source code per README section 9.4
+MODEL_NAME = "qwen2.5-10b-instruct"
+
+SYSTEM_PROMPT = """
+You are the Payment Agent in a Multi-Agent E-commerce Dispute Resolution System.
+Your responsibility:
+- Audit all payment rows for claimed_order_id.
+- Calculate payment_total_brl = SUM(payment_value).
+- Validate split payments (payment_count >= 2 and abs(payment_total - (item_total + freight_total)) <= 0.10).
+- Extract evidence: payment:<order_id>:<payment_sequential>.
+"""
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 PAYMENTS_CSV = os.path.join(DATA_DIR, "olist_order_payments_dataset.csv")

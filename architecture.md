@@ -1,135 +1,97 @@
-# Architecture — Multi-Agent E-commerce Dispute Resolution
+# Architecture Document — Multi-Agent E-commerce Dispute Resolution
 
-## 1. Sơ đồ tổng quan
+## 1. Tổng quan Kiến trúc System (Multi-Agent System)
 
-```text
-input/EC_XXX.json
-        │
-        ▼
-┌───────────────────────┐
-│      Coordinator       │  (Người 4, src/coordinator.py)
-│  - Nạp case, điều phối │
-│  - Ghi trace từng bước │
-└───────────┬────────────┘
-            │ claimed_order_id
-            ▼
-┌───────────────────────────┐
-│  Order & Seller Agent      │  (Người 1, src/agents/order_seller_agent.py)
-│  Đọc: orders, order_items, │
-│  customers, sellers (CSV)  │
-│  → order, items,           │
-│    seller_handoff_late,    │
-│    violating_seller_ids,   │
-│    item_total_brl,         │
-│    freight_total_brl,      │
-│    evidence_ids            │
-└───────────┬────────────────┘
-            │ handoff JSON
-      ┌─────┴─────┐
-      ▼           ▼
-┌───────────┐ ┌────────────┐
-│  Payment   │ │  Delivery   │  (Người 2, agents/payment_agent.py,
-│  Agent     │ │  Agent      │   agents/delivery_agent.py)
-│  Đọc:      │ │  Đọc: order,│
-│  order_    │ │  items từ   │
-│  payments  │ │  handoff    │
-│  (CSV)     │ │  Người 1    │
-│  → payment_│ │  → delivery_│
-│  total,    │ │  late,      │
-│  split ok, │ │  seller/    │
-│  evidence  │ │  logistics_ │
-│            │ │  late       │
-└─────┬──────┘ └─────┬───────┘
-      └──────┬───────┘
-             ▼ handoff JSON
-┌────────────────────────────┐
-│      Policy Agent           │  (Người 3, agents/policy_agent.py)
-│  Áp EC_POLICY_V1 theo thứ   │
-│  tự ưu tiên 6 rule → output │
-│  JSON đúng schema README    │
-└───────────┬──────────────────┘
-            │ output JSON (chưa xác nhận)
-            ▼
-┌────────────────────────────┐
-│      Verifier Agent         │  (Người 3, agents/verifier_agent.py)
-│  Kiểm schema, limit, evidence│
-│  format+tồn tại, consistency│
-│  → (is_valid, errors)       │
-└───────────┬──────────────────┘
-            │ is_valid, errors
-            ▼
-┌────────────────────────────┐
-│  Coordinator LLM Reasoning   │  (Người 4, src/coordinator.py,
-│  Model: llama-3.1-8b-instant │   qua Groq API)
-│  Chỉ sinh summary_vi +       │
-│  sanity_check_pass — KHÔNG   │
-│  được ghi đè số liệu đã      │
-│  verify                      │
-└───────────┬──────────────────┘
-            │
-            ▼
-   output/EC_XXX.json  +  logging/trace.jsonl (mỗi bước 1 dòng event)
+Hệ thống được thiết kế theo mô hình **Multi-Agent Collaborative Pipeline** với các vai trò phân định rõ ràng (Separation of Concerns). Mỗi Agent đảm nhận phân tích một miền dữ liệu (Domain) chuyên biệt, sau đó Handoff kết quả cho Agent điều phối (Coordinator Agent) và Agent chính sách (Policy Agent) để ra quyết định và kiểm chứng.
+
+```mermaid
+flowchart TD
+    INPUT["📥 Input Case<br/>EC_001.json ... EC_050.json"] --> COORD["🎯 Coordinator Agent<br/>(main.py)"]
+
+    subgraph Data_Extraction["Phase 1: Domain Analysis & Data Extraction"]
+        COORD --> OS_AGENT["📦 Order & Seller Agent<br/>(Person 1: src/agents/order_seller_agent.py)"]
+        COORD --> PAY_AGENT["💳 Payment Agent<br/>(Person 2: agents/payment_agent.py)"]
+        COORD --> DEL_AGENT["🚚 Delivery Agent<br/>(Person 2: agents/delivery_agent.py)"]
+    end
+
+    OS_AGENT -->|Handoff: Order, Items, Freight, Seller Handoff| POLICY["⚖️ Policy Agent<br/>(Person 3: agents/policy_agent.py)"]
+    PAY_AGENT -->|Handoff: Payments, Total BRL, Split Status| POLICY
+    DEL_AGENT -->|Handoff: Delivery Late, Seller/Logistics Fault| POLICY
+
+    subgraph Evaluation_Verification["Phase 2: Evaluation & Verification"]
+        POLICY -->|Candidate Assessment & Financial Resolution| VERIFIER["✅ Verifier Agent<br/>(Person 3: agents/verifier_agent.py)"]
+    end
+
+    VERIFIER -->|Pass/Fail Validation| COORD
+    COORD -->|Write Output & Trace| OUTPUT["📤 Output JSON<br/>output/EC_XXX.json"]
+    COORD --> TRACE["📋 Trace Log<br/>trace.jsonl"]
 ```
 
-## 2. Vai trò và quyền truy cập từng agent
+---
 
-| Agent | Sở hữu | Đọc | Ghi / trả về | Dùng LLM? |
-| --- | --- | --- | --- | --- |
-| Coordinator | Người 4 | `input/*.json`, tất cả handoff | `output/*.json`, `logging/trace.jsonl` | Có (reasoning pass, không quyết định số liệu) |
-| Order & Seller Agent | Người 1 | `orders`, `order_items`, `customers`, `sellers` (CSV) | Handoff order/item/seller cho Payment, Delivery, Policy Agent | Không |
-| Payment Agent | Người 2 | `order_payments` (CSV), `item_total_brl`/`freight_total_brl` từ Người 1 | Handoff payment cho Policy Agent | Không |
-| Delivery Agent | Người 2 | `order`, `items` từ handoff Người 1 | Handoff delivery cho Policy Agent | Không |
-| Policy Agent | Người 3 | Handoff Người 1 + Người 2 | Output JSON (chưa xác nhận) cho Verifier Agent | Không |
-| Verifier Agent | Người 3 | Output JSON + toàn bộ handoff gốc | `(is_valid, errors)` cho Coordinator | Không |
+## 2. Bảng Phân Vai & Quyền Truy Cập Dữ Liệu (Agent Roles & Permissions)
 
-Nguyên tắc quyền truy cập: mỗi agent chỉ đọc đúng nguồn dữ liệu thuộc phạm vi của mình (không agent nào tự ý đọc CSV ngoài phạm vi được giao) và chỉ giao tiếp với agent khác qua handoff JSON đã được chuẩn hoá — không có agent nào ghi trực tiếp vào `output/` ngoại trừ Coordinator.
+| Agent Name | Thành viên | Vai trò & Trách nhiệm chính | Quyền truy cập Dữ liệu (Data Scope) |
+|---|---|---|---|
+| **Coordinator Agent** | Người 4 | Điều phối luồng pipeline, nạp case input, thu thập trace, ghi file output | `input/*.json`, `output/*.json`, `trace.jsonl`, `metadata.json` |
+| **Order & Seller Agent** | Người 1 | Tra cứu thông tin đơn hàng, danh sách mặt hàng (items), người bán (sellers), kiểm tra mốc bàn giao seller (`shipping_limit_date`) | `olist_orders_dataset.csv`, `olist_order_items_dataset.csv`, `olist_sellers_dataset.csv` |
+| **Payment Agent** | Người 2 | Tính tổng tiền thanh toán, kiểm tra nhiều dòng thanh toán (split payment) hợp lệ trong sai số ±0.10 BRL | `olist_order_payments_dataset.csv` |
+| **Delivery Agent** | Người 3 (hỗ trợ N2) | So sánh thời điểm giao hàng thực tế vs dự kiến, phân loại trách nhiệm giao trễ thuộc Seller hay Logistics Provider | `olist_orders_dataset.csv`, `olist_order_items_dataset.csv` |
+| **Policy Agent** | Người 3 | Khớp các quy tắc nghiệp vụ theo bảng ưu tiên `EC_POLICY_V1`, tính khoản hoàn tiền và đề xuất action | Handoff payloads từ Order/Seller Agent, Payment Agent, Delivery Agent |
+| **Verifier Agent** | Người 3 | Kiểm tra schema, enum, giới hạn entity/evidence/action, và kiểm chứng evidence ID tồn tại thực tế | Output Candidate từ Policy Agent + Handoff payloads từ các Agents |
 
-## 3. Vì sao tách quyết định deterministic khỏi LLM
+---
 
-Toàn bộ engine quyết định (join dữ liệu, so sánh timestamp, áp `EC_POLICY_V1`, tính refund, kiểm schema) được cài đặt **thuần deterministic bằng Python** trong các module của Người 1/2/3. Lý do:
+## 3. Luồng Handoff Dữ liệu (Handoff Protocol & Schemas)
 
-- README.md yêu cầu "ưu tiên dữ liệu có thể kiểm chứng thay vì tin hoàn toàn vào lời khiếu nại hoặc tự tạo ra sự kiện không tồn tại" — các rule trong `EC_POLICY_V1` là quy tắc so sánh số liệu/ngày tháng chính xác tuyệt đối, không có chỗ cho suy diễn xác suất.
-- Phần chấm điểm (README mục 8) yêu cầu độ chính xác tuyệt đối cho `financial_resolution`, `evidence_ids`, `affected_entities` — sai số làm tròn hay hallucination của LLM sẽ trực tiếp mất điểm hoặc bị hard-gate.
-
-Đề bài yêu cầu mỗi agent khai báo và sử dụng model ≤10B tham số (README mục 9). Để vừa đáp ứng yêu cầu này vừa không đánh đổi độ chính xác đã kiểm chứng của Người 1/2/3, Coordinator (Người 4) thêm **một bước LLM riêng biệt sau Verifier Agent**: gọi `llama-3.1-8b-instant` qua Groq API để sinh đoạn diễn giải tiếng Việt cho khách hàng và tự đối chiếu tính nhất quán (`sanity_check_pass`). Bước này:
-
-- Chạy sau khi Verifier Agent đã xác nhận output hợp lệ.
-- Không có quyền ghi đè bất kỳ trường số liệu/boolean nào trong output cuối.
-- Nếu Groq API lỗi hoặc bị tắt (`--no-llm`), pipeline vẫn chạy đủ 50 case với output không đổi — chỉ thiếu phần `summary_vi` trong trace.
-
-Nhờ vậy hệ thống vừa có "agent gọi LLM" đúng tinh thần đề bài, vừa giữ nguyên độ chính xác 100% từ engine deterministic đã được Verifier Agent kiểm chứng.
-
-## 4. Luồng xử lý 1 case (chi tiết)
-
-1. Coordinator đọc `input/EC_XXX.json`, lấy `claimed_order_id`.
-2. Order & Seller Agent tra `claimed_order_id` trong `orders.csv`; nếu không tồn tại, trả handoff rỗng an toàn. Join `order_items`, `customers`, `sellers`; tính `seller_handoff_late` bằng so sánh `order_delivered_carrier_date` với `shipping_limit_date` của từng item.
-3. Payment Agent join `order_payments` theo `order_id`, tính `payment_total_brl`, kiểm tra split payment hợp lệ (≥2 payment rows và lệch ≤0.10 BRL so với `item_total + freight_total`).
-4. Delivery Agent so sánh `order_delivered_customer_date` với `order_estimated_delivery_date`; nếu trễ, phân loại seller-late hay logistics-late dựa trên `shipping_limit_date`. Xử lý an toàn khi order `canceled`/`unavailable` (thiếu timestamp).
-5. Policy Agent áp 6 rule theo đúng thứ tự ưu tiên trong README mục 4, sinh output JSON đầy đủ 6 khối bắt buộc (`assessment`, `affected_entities`, `root_cause_analysis`, `evidence_ids`, `financial_resolution`, `resolution_actions`).
-6. Verifier Agent kiểm schema, giới hạn số lượng entity/evidence/cause/party/action, định dạng + tồn tại evidence ID, tính nhất quán `case_status`/`refund`/`party`/`action` theo policy đã khớp, làm tròn 2 chữ số thập phân.
-7. Coordinator gọi LLM reasoning (Groq), ghi `output/EC_XXX.json` và toàn bộ trace event của case vào `logging/trace.jsonl`.
-
-## 5. Handoff format
-
-Xem `plan.md` mục 3–5 cho JSON schema handoff chi tiết của từng agent (Order/Seller, Payment, Delivery). Output cuối cùng đúng schema README.md mục 6.
-
-## 6. Cấu trúc source code
-
-```text
-src/
-  agents/
-    data_loader.py        # Người 1 — nạp CSV 1 lần cho toàn batch
-    order_seller_agent.py # Người 1 — Order & Seller Agent
-  coordinator.py           # Người 4 — điều phối pipeline + LLM reasoning
-  llm_client.py             # Người 4 — Groq API client dùng chung
-  main.py                   # Người 4 — batch runner 50 case
-agents/
-  payment_agent.py          # Người 2
-  delivery_agent.py         # Người 2
-  policy_agent.py           # Người 3
-  verifier_agent.py         # Người 3
-data/                       # 5/9 CSV Olist thực sự dùng trong pipeline
-input/EC_001.json .. EC_050.json
-output/EC_001.json .. EC_050.json   (sinh ra khi chạy batch)
-logging/trace.jsonl, logging/metadata.json
+### 3.1 Order & Seller Agent Handoff (`os_handoff`)
+```json
+{
+  "order": { "order_id": "...", "order_status": "delivered", ... },
+  "items": [ { "order_item_id": 1, "seller_id": "...", "price": 100.0, "freight_value": 15.0, "shipping_limit_date": "..." } ],
+  "seller_handoff_late": true,
+  "violating_seller_ids": [ "<seller_id>" ],
+  "item_total_brl": 100.0,
+  "freight_total_brl": 15.0,
+  "evidence_ids": [ "order:<order_id>", "item:<order_id>:1", "seller:<seller_id>" ]
+}
 ```
+
+### 3.2 Payment Agent Handoff (`pay_handoff`)
+```json
+{
+  "payment_rows": [ { "payment_sequential": 1, "payment_type": "credit_card", "payment_value": 115.0 } ],
+  "payment_count": 1,
+  "payment_total_brl": 115.0,
+  "has_valid_split_payment": false,
+  "payment_ids": [ "<order_id>:1" ],
+  "evidence_ids": [ "payment:<order_id>:1" ]
+}
+```
+
+### 3.3 Delivery Agent Handoff (`del_handoff`)
+```json
+{
+  "delivery_late": true,
+  "seller_late": true,
+  "logistics_late": false,
+  "delivery_within_estimate": false,
+  "violating_seller_ids": [ "<seller_id>" ],
+  "timestamps": { "delivered_customer": "...", "estimated_delivery": "...", "delivered_carrier": "..." }
+}
+```
+
+---
+
+## 4. Quy trình Đảm bảo Chất lượng & Verifier Agent (Verification Checks)
+
+Verifier Agent thực hiện 6 nhóm kiểm tra trước khi ghi nhận file output:
+1. **Schema Validation**: Đảm bảo đầy đủ các key top-level và nested object.
+2. **Enum & Bound Validation**: `primary_issue` thuộc 6 loại quy định, `confidence` trong `[0, 1]`, `currency = "BRL"`.
+3. **Limit Enforcement**: `order_ids` (<=5), `item_ids` (<=5), `seller_ids` (<=5), `payment_ids` (<=5), `evidence_ids` (<=10), `ranked_causes` (<=3), `responsible_parties` (<=3), `resolution_actions` (<=5).
+4. **Evidence Anti-Hallucination**: Kiểm tra mọi Evidence ID nộp lên (ngoại trừ `policy:CODE`) phải tồn tại thực sự trong tập dữ liệu CSV thu thập từ Handoff.
+5. **Consistency Checks**:
+   - `canceled_order_paid` / `unavailable_order_paid` -> Refund = `payment_total_brl`, Party = `platform` / `OLIST_PLATFORM`.
+   - `late_delivery_seller` / `late_delivery_logistics` -> Refund = `freight_total_brl`, Party = `seller` hoặc `logistics_provider`.
+   - `valid_split_payment` / `unsupported_late_claim` -> Refund = `0.0`.
+6. **Decimal Precision**: Toàn bộ giá trị tài chính bắt buộc làm tròn đúng 2 chữ số thập phân (`round(val, 2)`).

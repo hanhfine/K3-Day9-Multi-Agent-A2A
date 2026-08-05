@@ -18,7 +18,6 @@ import argparse
 import json
 import os
 import sys
-import traceback
 
 _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT_DIR not in sys.path:
@@ -57,40 +56,16 @@ def main() -> None:
     stats = {issue: 0 for issue in policy_agent.PRIMARY_ISSUES}
     low_confidence: list[str] = []
     failed_cases: list[tuple[str, list[str]]] = []
-    crashed_cases: list[tuple[str, str]] = []
     total = 0
 
     with open(TRACE_PATH, "w", encoding="utf-8") as trace_f:  # ghi đè, không append trace cũ
         for i in range(1, 51):
-            case_id_guess = f"EC_{i:03d}"
-            case_path = os.path.join(INPUT_DIR, f"{case_id_guess}.json")
+            case_path = os.path.join(INPUT_DIR, f"EC_{i:03d}.json")
             if not os.path.exists(case_path):
                 print(f"[WARN] Thiếu file input: {case_path}")
                 continue
 
-            # Bọc từng case trong try/except: 1 case lỗi (exception trong agent
-            # deterministic của Người 1/2/3, dữ liệu thiếu, v.v.) không được phép
-            # làm sập cả batch — nếu không sẽ thiếu file cho các case sau đó.
-            try:
-                result = coordinator.run_case(case_path)
-            except Exception:
-                err_text = traceback.format_exc()
-                crashed_cases.append((case_id_guess, err_text))
-                print(f"[CRASH] {case_id_guess}: {err_text.strip().splitlines()[-1]}")
-                trace_f.write(
-                    json.dumps(
-                        {
-                            "case_id": case_id_guess,
-                            "agent": "coordinator",
-                            "event": "crash",
-                            "payload": {"error": err_text},
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
-                continue
-
+            result = coordinator.run_case(case_path)
             total += 1
             case_id = result["case_id"]
             output = result["output"]
@@ -117,11 +92,6 @@ def main() -> None:
     for issue, count in stats.items():
         print(f"  {issue:30s}: {count}")
     print(f"  {'TOTAL':30s}: {total}")
-
-    if crashed_cases:
-        print(f"\nCẢNH BÁO {len(crashed_cases)} case CRASH (không ghi được output): "
-              f"{[c for c, _ in crashed_cases]}")
-        print("Xem chi tiết lỗi trong logging/trace.jsonl (event=\"crash\") hoặc log console phía trên.")
 
     if low_confidence:
         print(f"\nCẢNH BÁO case confidence < 0.6: {low_confidence}")

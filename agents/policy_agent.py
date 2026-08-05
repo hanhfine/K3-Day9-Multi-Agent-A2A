@@ -2,18 +2,33 @@
 Policy Agent — Người 3
 ========================
 Nhận handoff từ:
-  - Order/Seller Agent (Người 1): order, items, seller_handoff_late, violating_seller_ids,
-    item_total_brl, freight_total_brl, evidence_ids
-  - Payment Agent (Người 2): payment_rows, payment_total_brl, has_valid_split_payment,
-    payment_ids, evidence_ids
-  - Delivery Agent (Người 2): delivery_late, seller_late, logistics_late,
-    delivery_within_estimate, violating_seller_ids
+  - Order/Seller Agent (Người 1)
+  - Payment Agent (Người 2)
+  - Delivery Agent (Người 2)
 
 Áp dụng EC_POLICY_V1 theo đúng thứ tự ưu tiên (README mục 4) và sinh output JSON cuối
 cùng theo schema README mục 6.
 """
 
 from typing import Any
+
+# Model <= 10B declared in source code per README section 9.4
+MODEL_NAME = "qwen2.5-10b-instruct"
+
+SYSTEM_PROMPT = """
+You are the Policy Agent in a Multi-Agent E-commerce Dispute Resolution System.
+Your responsibility:
+- Synthesize handoff evidence from OrderSellerAgent, PaymentAgent, and DeliveryAgent.
+- Apply EC_POLICY_V1 business rules strictly in priority order:
+  1. canceled_order_paid (order_status == 'canceled' and payment > 0)
+  2. unavailable_order_paid (order_status == 'unavailable' and payment > 0)
+  3. late_delivery_seller (delivered_customer > estimated_delivery and carrier_date > shipping_limit)
+  4. late_delivery_logistics (delivered_customer > estimated_delivery and carrier_date <= shipping_limit)
+  5. valid_split_payment (payment_count >= 2 and abs(payment_total - (item_total + freight_total)) <= 0.10)
+  6. unsupported_late_claim (delivered_customer <= estimated_delivery and payment matches)
+- Output full financial resolution (item_total_brl, freight_total_brl, payment_total_brl, recommended_refund_brl).
+- Specify resolution actions and affected entity IDs within constraints.
+"""
 
 
 # Root-cause code hợp lệ (README mục 4)
@@ -162,9 +177,9 @@ def evaluate(
 
     # Rule 1: canceled_order_paid
     if order_status == "canceled" and payment_total > 0:
-        ev = _build_evidence(order_ev, [payment_ev], "ORDER_CANCELED_AFTER_PAYMENT")
+        ev = _build_evidence(order_ev, [item_ev, payment_ev], "ORDER_CANCELED_AFTER_PAYMENT")
         return _finish(
-            "canceled_order_paid", "action_required", 0.95,
+            "canceled_order_paid", "action_required", 0.98,
             "ORDER_CANCELED_AFTER_PAYMENT",
             [{"party_type": "platform", "party_id": "OLIST_PLATFORM"}],
             payment_total, "issue_full_refund", ev,
@@ -172,9 +187,9 @@ def evaluate(
 
     # Rule 2: unavailable_order_paid
     if order_status == "unavailable" and payment_total > 0:
-        ev = _build_evidence(order_ev, [payment_ev], "ORDER_UNAVAILABLE_AFTER_PAYMENT")
+        ev = _build_evidence(order_ev, [item_ev, payment_ev], "ORDER_UNAVAILABLE_AFTER_PAYMENT")
         return _finish(
-            "unavailable_order_paid", "action_required", 0.95,
+            "unavailable_order_paid", "action_required", 0.98,
             "ORDER_UNAVAILABLE_AFTER_PAYMENT",
             [{"party_type": "platform", "party_id": "OLIST_PLATFORM"}],
             payment_total, "issue_full_refund", ev,
@@ -182,20 +197,20 @@ def evaluate(
 
     # Rule 3: late_delivery_seller — giao trễ estimated VÀ carrier nhận hàng sau shipping_limit
     if delivery.get("delivery_late") and delivery.get("seller_late"):
-        ev = _build_evidence(order_ev, [item_ev, seller_ev_violating], "SELLER_HANDOFF_AFTER_LIMIT")
+        ev = _build_evidence(order_ev, [item_ev, payment_ev, seller_ev_violating], "SELLER_HANDOFF_AFTER_LIMIT")
         seller_ids_for_parties = violating_sellers or all_seller_ids[:1]
         parties = [{"party_type": "seller", "party_id": sid} for sid in seller_ids_for_parties]
         return _finish(
-            "late_delivery_seller", "action_required", 0.9,
+            "late_delivery_seller", "action_required", 0.92,
             "SELLER_HANDOFF_AFTER_LIMIT", parties,
             freight_total, "refund_freight", ev,
         )
 
     # Rule 4: late_delivery_logistics — giao trễ estimated NHƯNG seller bàn giao đúng hạn
     if delivery.get("delivery_late") and delivery.get("logistics_late"):
-        ev = _build_evidence(order_ev, [item_ev], "CARRIER_DELIVERED_AFTER_ESTIMATE")
+        ev = _build_evidence(order_ev, [item_ev, payment_ev], "CARRIER_DELIVERED_AFTER_ESTIMATE")
         return _finish(
-            "late_delivery_logistics", "action_required", 0.85,
+            "late_delivery_logistics", "action_required", 0.92,
             "CARRIER_DELIVERED_AFTER_ESTIMATE",
             [{"party_type": "logistics_provider", "party_id": "LOGISTICS_PROVIDER"}],
             freight_total, "refund_freight", ev,
@@ -203,16 +218,16 @@ def evaluate(
 
     # Rule 5: valid_split_payment — >=2 payment rows, tổng khớp item+freight trong 0.10 BRL
     if payment.get("has_valid_split_payment"):
-        ev = _build_evidence(order_ev, [payment_ev], "MULTIPLE_PAYMENTS_RECONCILED")
+        ev = _build_evidence(order_ev, [item_ev, payment_ev], "MULTIPLE_PAYMENTS_RECONCILED")
         return _finish(
-            "valid_split_payment", "no_action", 0.9,
+            "valid_split_payment", "no_action", 0.95,
             "MULTIPLE_PAYMENTS_RECONCILED", [],
             0.0, "explain_valid_split_payment", ev,
         )
 
     # Rule 6: unsupported_late_claim — fallback mặc định (giao đúng hạn / không đủ cơ sở)
-    confidence = 0.8 if delivery.get("delivery_within_estimate") else 0.5
-    ev = _build_evidence(order_ev, [payment_ev], "DELIVERY_WITHIN_ESTIMATE")
+    confidence = 0.92 if delivery.get("delivery_within_estimate") else 0.50
+    ev = _build_evidence(order_ev, [item_ev, payment_ev], "DELIVERY_WITHIN_ESTIMATE")
     return _finish(
         "unsupported_late_claim", "no_action", confidence,
         "DELIVERY_WITHIN_ESTIMATE", [],

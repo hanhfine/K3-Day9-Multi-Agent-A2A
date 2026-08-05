@@ -1,9 +1,23 @@
 import pandas as pd
 from typing import Dict, Any
 
+# Model <= 10B declared in source code per README section 9.4
+MODEL_NAME = "qwen2.5-10b-instruct"
+
+SYSTEM_PROMPT = """
+You are the Order & Seller Agent in a Multi-Agent E-commerce Dispute Resolution System.
+Your responsibility:
+- Analyze order status, item details, seller information, and freight costs.
+- Compare order_delivered_carrier_date with shipping_limit_date for each item.
+- Identify if seller handed off items after shipping_limit_date.
+- Extract structured evidence: order:<order_id>, item:<order_id>:<item_id>, seller:<seller_id>.
+"""
+
 class OrderSellerAgent:
     def __init__(self, data_loader):
         self.data_loader = data_loader
+        self.model_name = MODEL_NAME
+        self.system_prompt = SYSTEM_PROMPT
 
     def process(self, claimed_order_id: str) -> Dict[str, Any]:
         data = self.data_loader.get_order_data(claimed_order_id)

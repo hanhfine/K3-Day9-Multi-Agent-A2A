@@ -3,18 +3,23 @@ Verifier Agent — Người 3
 ==========================
 Kiểm tra output JSON do Policy Agent sinh ra, TRƯỚC khi coordinator ghi file vào
 output/. Không tự sửa dữ liệu — chỉ báo cáo lỗi để pipeline quyết định.
-
-Kiểm tra:
-  1. Schema đủ field bắt buộc theo README mục 6.
-  2. Giá trị enum hợp lệ (primary_issue, case_status), confidence trong [0, 1].
-  3. Giới hạn số lượng entity/evidence/cause/party/action.
-  4. Evidence ID đúng định dạng VÀ thực sự tồn tại trong dữ liệu (chống false positive).
-  5. Consistency: case_status / refund / responsible party / action phải khớp policy.
-  6. Toàn bộ số tiền đã làm tròn 2 chữ số thập phân.
 """
 
 import re
 from typing import Any
+
+# Model <= 10B declared in source code per README section 9.4
+MODEL_NAME = "qwen2.5-10b-instruct"
+
+SYSTEM_PROMPT = """
+You are the Verifier Agent in a Multi-Agent E-commerce Dispute Resolution System.
+Your responsibility:
+- Audit PolicyAgent's output JSON for schema completeness.
+- Validate bounds: entities <= 5, evidence <= 10, causes <= 3, parties <= 3, actions <= 5.
+- Verify evidence ID existence in CSV dataset (prevent false positives).
+- Cross-check consistency between primary_issue, case_status, responsible_parties, and recommended_refund.
+- Ensure 2-decimal precision on all financial amounts.
+"""
 
 from .policy_agent import (
     MAX_ACTIONS,

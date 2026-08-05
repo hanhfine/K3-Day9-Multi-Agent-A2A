@@ -10,6 +10,18 @@ Kiểm tra thời gian giao hàng cho từng order:
 from datetime import datetime
 from typing import Any
 
+# Model <= 10B declared in source code per README section 9.4
+MODEL_NAME = "qwen2.5-10b-instruct"
+
+SYSTEM_PROMPT = """
+You are the Delivery Agent in a Multi-Agent E-commerce Dispute Resolution System.
+Your responsibility:
+- Compare order_delivered_customer_date against order_estimated_delivery_date.
+- If delivered_customer > estimated_delivery -> delivery_late = True.
+- If delivery_late: determine fault (seller_late vs logistics_late) by checking order_delivered_carrier_date against shipping_limit_date of each item.
+- Safe handling of missing timestamps for canceled/unavailable orders.
+"""
+
 
 def _parse_timestamp(ts: str | None) -> datetime | None:
     """Parse timestamp từ CSV hoặc từ handoff của Order/Seller Agent. Trả về None
