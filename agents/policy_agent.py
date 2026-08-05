@@ -201,7 +201,7 @@ def evaluate(
         seller_ids_for_parties = violating_sellers or all_seller_ids[:1]
         parties = [{"party_type": "seller", "party_id": sid} for sid in seller_ids_for_parties]
         return _finish(
-            "late_delivery_seller", "action_required", 0.92,
+            "late_delivery_seller", "action_required", 0.95,
             "SELLER_HANDOFF_AFTER_LIMIT", parties,
             freight_total, "refund_freight", ev,
         )
@@ -210,7 +210,7 @@ def evaluate(
     if delivery.get("delivery_late") and delivery.get("logistics_late"):
         ev = _build_evidence(order_ev, [item_ev, payment_ev], "CARRIER_DELIVERED_AFTER_ESTIMATE")
         return _finish(
-            "late_delivery_logistics", "action_required", 0.92,
+            "late_delivery_logistics", "action_required", 0.95,
             "CARRIER_DELIVERED_AFTER_ESTIMATE",
             [{"party_type": "logistics_provider", "party_id": "LOGISTICS_PROVIDER"}],
             freight_total, "refund_freight", ev,
@@ -220,13 +220,13 @@ def evaluate(
     if payment.get("has_valid_split_payment"):
         ev = _build_evidence(order_ev, [item_ev, payment_ev], "MULTIPLE_PAYMENTS_RECONCILED")
         return _finish(
-            "valid_split_payment", "no_action", 0.95,
+            "valid_split_payment", "no_action", 0.98,
             "MULTIPLE_PAYMENTS_RECONCILED", [],
             0.0, "explain_valid_split_payment", ev,
         )
 
     # Rule 6: unsupported_late_claim — fallback mặc định (giao đúng hạn / không đủ cơ sở)
-    confidence = 0.92 if delivery.get("delivery_within_estimate") else 0.50
+    confidence = 0.95 if delivery.get("delivery_within_estimate") else 0.50
     ev = _build_evidence(order_ev, [item_ev, payment_ev], "DELIVERY_WITHIN_ESTIMATE")
     return _finish(
         "unsupported_late_claim", "no_action", confidence,
